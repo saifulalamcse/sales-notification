@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Sales Notification
- * Plugin URI:        https://example.com/plugins/sales-notification
+ * Plugin URI:        https://saiful.com/plugins/sales-notification
  * Description:       Display real-time WooCommerce purchase notifications on product pages to build social proof and increase conversion rates.
  * Version:           1.0.1
  * Requires at least: 5.8
