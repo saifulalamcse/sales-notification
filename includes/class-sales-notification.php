@@ -102,8 +102,6 @@ class Sales_Notification {
 		$this->loader->add_action( 'wp_ajax_sn_delete_demo_notification',$admin, 'ajax_delete_demo_notification' );
 		$this->loader->add_action( 'wp_ajax_sn_reorder_demo_notifications',$admin, 'ajax_reorder_demo_notifications' );
 		$this->loader->add_action( 'wp_ajax_sn_get_analytics',                $admin, 'ajax_get_analytics' );
-		$this->loader->add_action( 'wp_ajax_sn_save_updater_credentials',    $admin, 'ajax_save_updater_credentials' );
-		$this->loader->add_action( 'wp_ajax_sn_delete_updater_credentials',  $admin, 'ajax_delete_updater_credentials' );
 	}
 
 	/**

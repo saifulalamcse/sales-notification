@@ -400,43 +400,6 @@ class SN_Admin {
 		wp_send_json_success( $data );
 	}
 
-
-	/**
-	 * AJAX: Save GitHub updater credentials (repo URL + token).
-	 *
-	 * Credentials are stored directly in wp_options, separate from the main
-	 * settings array, so the token never appears in an exported settings file.
-	 */
-	public function ajax_save_updater_credentials() {
-		$this->verify_nonce_and_cap( 'manage_options' );
-
-		$repo_url = isset( $_POST['repo_url'] ) ? esc_url_raw( wp_unslash( $_POST['repo_url'] ) ) : '';
-		$token    = isset( $_POST['token'] )    ? sanitize_text_field( wp_unslash( $_POST['token'] ) ) : '';
-
-		if ( empty( $repo_url ) ) {
-			wp_send_json_error( array( 'message' => __( 'Repository URL is required.', 'sales-notification' ) ) );
-		}
-
-		SN_Updater::set_repo_url( $repo_url );
-
-		// Only update the token when a non-empty value is submitted.
-		// A blank field means "keep the existing token".
-		if ( ! empty( $token ) ) {
-			SN_Updater::set_token( $token );
-		}
-
-		wp_send_json_success( array( 'message' => __( 'Update credentials saved.', 'sales-notification' ) ) );
-	}
-
-	/**
-	 * AJAX: Delete GitHub updater credentials.
-	 */
-	public function ajax_delete_updater_credentials() {
-		$this->verify_nonce_and_cap( 'manage_options' );
-		SN_Updater::delete_credentials();
-		wp_send_json_success( array( 'message' => __( 'Update credentials removed.', 'sales-notification' ) ) );
-	}
-
 	// -----------------------------------------------------------------------
 	// Utilities
 	// -----------------------------------------------------------------------

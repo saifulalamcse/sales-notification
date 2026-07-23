@@ -1157,39 +1157,3 @@
     font-size: 13px;
   }
 }
-
-/* ==========================================================================
-   Utility — Automatic Updates card
-   ========================================================================== */
-.sn-text-success {
-  color: var(--sn-admin-success);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.sn-text-success .dashicons {
-  font-size: 16px;
-  width: 16px;
-  height: 16px;
-}
-
-.sn-updater-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-
-/* Ghost-danger: a subdued destructive button */
-.sn-btn--danger-ghost {
-  color: var(--sn-admin-danger);
-  border-color: transparent;
-}
-
-.sn-btn--danger-ghost:hover {
-  background: #fef2f2;
-  border-color: #fca5a5;
-  color: var(--sn-admin-danger-h);
-}

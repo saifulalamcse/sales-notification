@@ -2,23 +2,20 @@
 /**
  * Automatic update integration using YahnisElsts/plugin-update-checker.
  *
- * Connects the plugin to its private GitHub repository and periodically
- * checks for a new version by comparing the version tag in the repository
- * with the version defined in this plugin's main file header.
+ * Connects the plugin to its public GitHub repository and periodically
+ * checks for new versions by comparing GitHub Release tags against the
+ * version defined in this plugin's main file header.
  *
- * How updates are released:
- *   1. Bump the version in sales-notification.php (plugin header + SN_VERSION constant).
- *   2. Push the changes and create a GitHub Release whose tag matches the
- *      new version number (e.g. "1.0.2" or "v1.0.2").
- *   3. WordPress will detect the new version on the next update-check cycle
- *      (~12 hours, or immediately via Plugins → Check for updates).
+ * No configuration is required. Updates are delivered automatically
+ * through the standard WordPress update UI.
  *
- * GitHub Token storage:
- *   The access token is stored in WordPress options under the key
- *   'sn_github_token' so it never lives in version-controlled source code.
- *   Set it once from Settings → Advanced, or programmatically:
- *
- *     update_option( 'sn_github_token', 'your_token_here' );
+ * How to release an update:
+ *   1. Bump the "Version:" header in sales-notification.php.
+ *   2. Bump the SN_VERSION constant in sales-notification.php to the same value.
+ *   3. Commit and push to GitHub.
+ *   4. Create a GitHub Release tagged with the new version (e.g. "1.0.3").
+ *   5. WordPress detects the new release on the next update-check cycle
+ *      (~12 hours), or immediately via Plugins → Check for updates.
  *
  * @package    SalesNotification
  * @subpackage SalesNotification/includes
@@ -31,18 +28,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 class SN_Updater {
 
 	/**
-	 * WordPress option key that holds the GitHub Personal Access Token.
+	 * The public GitHub repository URL.
+	 * PUC auto-detects this as a GitHub source and uses GitHub Releases
+	 * to compare version numbers. No token needed for public repositories.
 	 */
-	const TOKEN_OPTION_KEY = 'sn_github_token';
+	const GITHUB_REPO_URL = 'https://github.com/saifulalamcse/sales-notification';
 
 	/**
-	 * WordPress option key that holds the full GitHub repository URL.
-	 * Example: https://github.com/your-username/sales-notification
-	 */
-	const REPO_OPTION_KEY = 'sn_github_repo_url';
-
-	/**
-	 * Cached update checker instance (YahnisElsts\PluginUpdateChecker).
+	 * Cached update checker instance.
 	 *
 	 * @var \YahnisElsts\PluginUpdateChecker\v5\Plugin\UpdateChecker|null
 	 */
@@ -51,25 +44,16 @@ class SN_Updater {
 	/**
 	 * Bootstrap the update checker.
 	 *
-	 * Call this once from the main plugin class. It loads the PUC library,
-	 * configures the GitHub source, attaches the access token, and registers
-	 * the update checker with WordPress.
+	 * Called on the plugins_loaded hook (priority 5) by the main plugin class
+	 * so that updates are visible to WP-CLI and all management tools, not
+	 * only to logged-in users on admin pages.
 	 *
 	 * @return void
 	 */
 	public static function init() {
-		// Retrieve configuration from options.
-		$repo_url = get_option( self::REPO_OPTION_KEY, '' );
-		$token    = get_option( self::TOKEN_OPTION_KEY, '' );
-
-		// Both values must be set before we can initialise.
-		if ( empty( $repo_url ) || empty( $token ) ) {
-			return;
-		}
-
 		$puc_file = SN_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php';
 
-		// Guard: library must be present (cloned / extracted into the plugin dir).
+		// Guard: library must exist inside the plugin directory.
 		if ( ! file_exists( $puc_file ) ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -80,77 +64,38 @@ class SN_Updater {
 
 		require_once $puc_file;
 
-		// Build the update checker pointed at the GitHub repository.
-		// PucFactory auto-detects that this is a GitHub URL and returns a
-		// GitHubChecker instance that uses the version-based update method:
-		// it reads the "Version" header from the main plugin file in the
-		// repository and compares it to the locally installed version.
+		// Build the update checker.
+		// PucFactory detects the GitHub URL and creates a GitHubChecker that
+		// reads version numbers from GitHub Releases (tagged releases). When a
+		// Release tag is higher than the installed "Version:" header value,
+		// WordPress shows the standard update notification.
 		self::$update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-			$repo_url,
-			SN_PLUGIN_FILE, // Absolute path to the main plugin file.
-			'sales-notification'  // Plugin slug — must match the directory name.
+			self::GITHUB_REPO_URL,
+			SN_PLUGIN_FILE,         // Absolute path to the main plugin file.
+			'sales-notification'    // Plugin slug — must match the directory name.
 		);
 
-		// Authenticate against the private repository.
-		// setAuthentication() accepts a GitHub Personal Access Token (classic
-		// or fine-grained) with at least "Contents: read" permission on the repo.
-		self::$update_checker->setAuthentication( $token );
-
-		// Instruct the checker to use the "stable branch" release mechanism:
-		// a new update is triggered by a GitHub Release (tagged release).
-		// The library will compare the tag to the installed Version header.
-		self::$update_checker->setBranch( 'main' );
+		// Use GitHub Releases as the update source.
+		// getLatestVersion() will look at the latest Release tag rather than
+		// just the branch head, which is the intended version-based workflow.
+		self::$update_checker->getVcsApi()->enableReleaseAssets();
 	}
 
 	/**
 	 * Return the update checker instance, if initialised.
 	 *
-	 * Useful for developers who need to further customise PUC behaviour,
-	 * e.g. changing the update interval:
+	 * Useful for developers who need to customise PUC behaviour, e.g.:
 	 *
 	 *   add_action( 'plugins_loaded', function() {
 	 *       $checker = SN_Updater::get_checker();
 	 *       if ( $checker ) {
 	 *           $checker->setCheckPeriod( 6 ); // Check every 6 hours.
 	 *       }
-	 *   } );
+	 *   }, 10 );
 	 *
 	 * @return \YahnisElsts\PluginUpdateChecker\v5\Plugin\UpdateChecker|null
 	 */
 	public static function get_checker() {
 		return self::$update_checker;
-	}
-
-	/**
-	 * Save the GitHub repository URL.
-	 *
-	 * @param string $url Full GitHub repository URL (HTTPS).
-	 * @return bool True on update, false on failure.
-	 */
-	public static function set_repo_url( $url ) {
-		return update_option( self::REPO_OPTION_KEY, esc_url_raw( trim( $url ) ) );
-	}
-
-	/**
-	 * Save the GitHub Personal Access Token.
-	 *
-	 * The token is stored as plain text in wp_options. It is only accessible
-	 * server-side and is never sent to the browser.
-	 *
-	 * @param string $token GitHub PAT.
-	 * @return bool True on update, false on failure.
-	 */
-	public static function set_token( $token ) {
-		return update_option( self::TOKEN_OPTION_KEY, sanitize_text_field( trim( $token ) ) );
-	}
-
-	/**
-	 * Delete the stored token (e.g. on plugin uninstall).
-	 *
-	 * @return void
-	 */
-	public static function delete_credentials() {
-		delete_option( self::TOKEN_OPTION_KEY );
-		delete_option( self::REPO_OPTION_KEY );
 	}
 }
