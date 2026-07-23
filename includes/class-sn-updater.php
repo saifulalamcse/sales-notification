@@ -3,8 +3,8 @@
  * Automatic update integration using YahnisElsts/plugin-update-checker.
  *
  * Connects the plugin to its public GitHub repository and periodically
- * checks for new versions by comparing GitHub Release tags against the
- * version defined in this plugin's main file header.
+ * checks for new versions by comparing the version in the main branch
+ * against the version defined in this plugin's main file header.
  *
  * No configuration is required. Updates are delivered automatically
  * through the standard WordPress update UI.
@@ -12,9 +12,8 @@
  * How to release an update:
  *   1. Bump the "Version:" header in sales-notification.php.
  *   2. Bump the SN_VERSION constant in sales-notification.php to the same value.
- *   3. Commit and push to GitHub.
- *   4. Create a GitHub Release tagged with the new version (e.g. "1.0.3").
- *   5. WordPress detects the new release on the next update-check cycle
+ *   3. Commit and push directly to the main branch on GitHub.
+ *   4. WordPress detects the new version on the next update-check cycle
  *      (~12 hours), or immediately via Plugins → Check for updates.
  *
  * @package    SalesNotification
@@ -75,10 +74,9 @@ class SN_Updater {
 			'sales-notification'    // Plugin slug — must match the directory name.
 		);
 
-		// Use GitHub Releases as the update source.
-		// getLatestVersion() will look at the latest Release tag rather than
-		// just the branch head, which is the intended version-based workflow.
-		self::$update_checker->getVcsApi()->enableReleaseAssets();
+		// Set the branch to track (main).
+		// Comparing the version header in the main branch against the local version.
+		self::$update_checker->setBranch( 'main' );
 	}
 
 	/**
