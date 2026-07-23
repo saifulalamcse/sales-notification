@@ -50,6 +50,7 @@ class Sales_Notification {
 		$this->define_admin_hooks();
 		$this->define_public_hooks();
 		$this->define_api_hooks();
+		$this->setup_updater();
 		$this->loader->run();
 	}
 
@@ -67,6 +68,7 @@ class Sales_Notification {
 		require_once SN_PLUGIN_DIR . 'includes/class-sn-rest-api.php';
 		require_once SN_PLUGIN_DIR . 'includes/class-sn-privacy.php';
 		require_once SN_PLUGIN_DIR . 'admin/class-sn-admin.php';
+		require_once SN_PLUGIN_DIR . 'includes/class-sn-updater.php';
 
 		$this->loader = new SN_Loader();
 	}
@@ -99,7 +101,9 @@ class Sales_Notification {
 		$this->loader->add_action( 'wp_ajax_sn_save_demo_notification', $admin, 'ajax_save_demo_notification' );
 		$this->loader->add_action( 'wp_ajax_sn_delete_demo_notification',$admin, 'ajax_delete_demo_notification' );
 		$this->loader->add_action( 'wp_ajax_sn_reorder_demo_notifications',$admin, 'ajax_reorder_demo_notifications' );
-		$this->loader->add_action( 'wp_ajax_sn_get_analytics',          $admin, 'ajax_get_analytics' );
+		$this->loader->add_action( 'wp_ajax_sn_get_analytics',                $admin, 'ajax_get_analytics' );
+		$this->loader->add_action( 'wp_ajax_sn_save_updater_credentials',    $admin, 'ajax_save_updater_credentials' );
+		$this->loader->add_action( 'wp_ajax_sn_delete_updater_credentials',  $admin, 'ajax_delete_updater_credentials' );
 	}
 
 	/**
@@ -130,6 +134,20 @@ class Sales_Notification {
 	private function define_api_hooks() {
 		$rest_api = new SN_REST_API();
 		$this->loader->add_action( 'rest_api_init', $rest_api, 'register_routes' );
+	}
+
+	/**
+	 * Initialise the automatic update checker.
+	 *
+	 * Hooked to plugins_loaded so that PUC is always available to both
+	 * the WordPress admin and WP-CLI / management tools — not just on
+	 * admin pages. The init() method is a no-op when credentials are not
+	 * yet configured, so this is safe to call unconditionally.
+	 */
+	private function setup_updater() {
+		// Static method — register directly with WordPress rather than through
+		// the loader (which requires a $component object instance).
+		add_action( 'plugins_loaded', array( 'SN_Updater', 'init' ), 5 );
 	}
 
 	/**

@@ -282,6 +282,74 @@ $consent_plugins = array(
 			</div>
 		</div>
 
+		<!-- Automatic Updates -->
+		<div class="sn-card">
+			<div class="sn-card__header">
+				<h2><?php esc_html_e( 'Automatic Updates', 'sales-notification' ); ?></h2>
+				<p class="sn-card__subtitle">
+					<?php esc_html_e( 'Connect to your private GitHub repository so WordPress can check for and install new plugin versions automatically.', 'sales-notification' ); ?>
+				</p>
+			</div>
+			<div class="sn-card__body">
+
+				<div class="sn-field">
+					<label class="sn-label" for="sn_github_repo_url">
+						<?php esc_html_e( 'GitHub Repository URL', 'sales-notification' ); ?>
+					</label>
+					<div class="sn-field__control">
+						<input type="url" id="sn_github_repo_url" class="sn-input"
+							placeholder="https://github.com/your-username/sales-notification"
+							value="<?php echo esc_attr( get_option( SN_Updater::REPO_OPTION_KEY, '' ) ); ?>">
+						<p class="sn-field__desc">
+							<?php esc_html_e( 'Full HTTPS URL of the GitHub repository where this plugin is hosted.', 'sales-notification' ); ?>
+						</p>
+					</div>
+				</div>
+
+				<div class="sn-field">
+					<label class="sn-label" for="sn_github_token">
+						<?php esc_html_e( 'GitHub Access Token', 'sales-notification' ); ?>
+					</label>
+					<div class="sn-field__control">
+						<input type="password" id="sn_github_token" class="sn-input"
+							placeholder="<?php esc_attr_e( 'Enter token — leave blank to keep current', 'sales-notification' ); ?>"
+							autocomplete="new-password">
+						<p class="sn-field__desc">
+							<?php
+							printf(
+								/* translators: %s: URL to GitHub token settings */
+								esc_html__( 'A GitHub Personal Access Token (classic or fine-grained) with at least %s permission on the repository. The token is stored server-side only and is never sent to the browser.', 'sales-notification' ),
+								'<strong>Contents: Read</strong>'
+							);
+							?>
+						</p>
+						<?php if ( get_option( SN_Updater::TOKEN_OPTION_KEY, '' ) ) : ?>
+							<p class="sn-field__desc sn-text-success">
+								<span class="dashicons dashicons-yes-alt"></span>
+								<?php esc_html_e( 'A token is currently saved. Enter a new value to replace it.', 'sales-notification' ); ?>
+							</p>
+						<?php endif; ?>
+					</div>
+				</div>
+
+				<div class="sn-updater-actions">
+					<button type="button" id="sn-save-updater-btn" class="sn-btn sn-btn--secondary">
+						<span class="dashicons dashicons-admin-network"></span>
+						<?php esc_html_e( 'Save Update Credentials', 'sales-notification' ); ?>
+					</button>
+					<?php if ( get_option( SN_Updater::TOKEN_OPTION_KEY, '' ) ) : ?>
+						<button type="button" id="sn-delete-updater-btn" class="sn-btn sn-btn--ghost sn-btn--danger-ghost">
+							<span class="dashicons dashicons-trash"></span>
+							<?php esc_html_e( 'Remove Credentials', 'sales-notification' ); ?>
+						</button>
+					<?php endif; ?>
+				</div>
+
+				<div id="sn-updater-notice" style="margin-top:12px;"></div>
+
+			</div><!-- .sn-card__body -->
+		</div><!-- .sn-card -->
+
 		<div class="sn-form-footer">
 			<button type="submit" class="sn-btn sn-btn--primary" id="sn-save-btn">
 				<span class="sn-btn__icon dashicons dashicons-saved"></span>
