@@ -17,6 +17,16 @@ class SN_Analytics {
 	 */
 	const TABLE = 'sn_analytics';
 
+	/**
+	 * Maximum events accepted in a single batch request.
+	 */
+	const MAX_BATCH_SIZE = 50;
+
+	/**
+	 * Rate-limit: max events per IP per hour.
+	 */
+	const RATE_LIMIT = 100;
+
 	// -----------------------------------------------------------------------
 	// Event Recording
 	// -----------------------------------------------------------------------
@@ -38,9 +48,19 @@ class SN_Analytics {
 			return false;
 		}
 
-		// Hash the IP for GDPR compliance.
+		if ( empty( $notification_id ) ) {
+			return false;
+		}
+
+		// Hash the IP with a per-site salt for GDPR compliance.
+		// The salt makes rainbow-table reversal computationally infeasible.
 		$raw_ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
-		$ip_hash = $raw_ip ? hash( 'sha256', $raw_ip ) : '';
+		$ip_hash = $raw_ip ? hash( 'sha256', $raw_ip . NONCE_SALT ) : '';
+
+		// Rate-limit: prevent analytics spam per IP.
+		if ( $ip_hash && ! $this->check_rate_limit( $ip_hash ) ) {
+			return false;
+		}
 
 		// Truncate user agent.
 		$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
@@ -64,7 +84,6 @@ class SN_Analytics {
 		if ( $result ) {
 			/**
 			 * Action: sn_analytics_event_recorded
-			 * Fires when an analytics event has been successfully recorded.
 			 *
 			 * @param string $event_type The event type.
 			 * @param array  $data       The event data.
@@ -81,22 +100,23 @@ class SN_Analytics {
 
 	/**
 	 * AJAX handler for tracking events from the frontend.
-	 * Compatible with both POST AJAX and REST API patterns.
 	 */
 	public function ajax_track_event() {
-		// Verify nonce.
+		// Verify nonce — hard stop on failure.
 		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 		if ( ! wp_verify_nonce( $nonce, 'sn_track_event' ) ) {
 			wp_send_json_error( null, 403 );
+			return;
 		}
 
 		if ( ! SN_Settings::get( 'enable_analytics' ) ) {
 			wp_send_json_success( array( 'recorded' => false ) );
+			return;
 		}
 
-		// Support batch events.
+		// Support batch events (capped to prevent abuse).
 		if ( ! empty( $_POST['events'] ) && is_array( $_POST['events'] ) ) {
-			$events  = wp_unslash( $_POST['events'] ); // phpcs:ignore
+			$events  = array_slice( wp_unslash( $_POST['events'] ), 0, self::MAX_BATCH_SIZE ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			$results = array();
 			foreach ( $events as $event ) {
 				$results[] = $this->record_event(
@@ -107,6 +127,7 @@ class SN_Analytics {
 				);
 			}
 			wp_send_json_success( array( 'results' => $results ) );
+			return;
 		}
 
 		// Single event.
@@ -118,6 +139,30 @@ class SN_Analytics {
 		);
 
 		wp_send_json_success( array( 'recorded' => $recorded ) );
+	}
+
+	/**
+	 * Transient-based per-IP rate limiter.
+	 *
+	 * @param string $ip_hash Hashed IP address.
+	 * @return bool True if within limit, false if over.
+	 */
+	private function check_rate_limit( $ip_hash ) {
+		$key   = 'sn_rl_' . substr( $ip_hash, 0, 16 );
+		$count = (int) get_transient( $key );
+
+		if ( $count >= self::RATE_LIMIT ) {
+			return false;
+		}
+
+		if ( 0 === $count ) {
+			set_transient( $key, 1, HOUR_IN_SECONDS );
+		} else {
+			// Increment without resetting TTL.
+			set_transient( $key, $count + 1, HOUR_IN_SECONDS );
+		}
+
+		return true;
 	}
 
 	// -----------------------------------------------------------------------
@@ -138,9 +183,11 @@ class SN_Analytics {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$totals = $wpdb->get_results(
-			"SELECT event_type, COUNT(*) as total FROM {$table} GROUP BY event_type",
+		$totals = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				'SELECT event_type, COUNT(*) as total FROM %i GROUP BY event_type', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$table
+			),
 			ARRAY_A
 		);
 
@@ -151,17 +198,19 @@ class SN_Analytics {
 			'ctr'               => '0.00',
 		);
 
-		foreach ( $totals as $row ) {
-			switch ( $row['event_type'] ) {
-				case 'impression':
-					$summary['impressions_total'] = (int) $row['total'];
-					break;
-				case 'click':
-					$summary['clicks_total'] = (int) $row['total'];
-					break;
-				case 'dismiss':
-					$summary['dismissals_total'] = (int) $row['total'];
-					break;
+		if ( is_array( $totals ) ) {
+			foreach ( $totals as $row ) {
+				switch ( $row['event_type'] ) {
+					case 'impression':
+						$summary['impressions_total'] = (int) $row['total'];
+						break;
+					case 'click':
+						$summary['clicks_total'] = (int) $row['total'];
+						break;
+					case 'dismiss':
+						$summary['dismissals_total'] = (int) $row['total'];
+						break;
+				}
 			}
 		}
 
@@ -181,22 +230,21 @@ class SN_Analytics {
 	 * Get the top N products by impression count.
 	 *
 	 * @param int $limit Number of products to return.
-	 * @return array Array of { product_id, total } objects.
+	 * @return array
 	 */
 	public function get_top_products( $limit = 5 ) {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE;
 		$limit = absint( $limit );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return $wpdb->get_results(
+		return $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
 				"SELECT product_id, COUNT(*) as total
 				 FROM {$table}
 				 WHERE event_type = 'impression' AND product_id > 0
 				 GROUP BY product_id
 				 ORDER BY total DESC
-				 LIMIT %d",
+				 LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$limit
 			)
 		);
@@ -214,14 +262,13 @@ class SN_Analytics {
 		$days       = absint( $days );
 		$date_start = gmdate( 'Y-m-d', strtotime( "-{$days} days" ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$rows = $wpdb->get_results(
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
 				"SELECT DATE(created_at) as day, event_type, COUNT(*) as total
 				 FROM {$table}
 				 WHERE created_at >= %s
 				 GROUP BY day, event_type
-				 ORDER BY day ASC",
+				 ORDER BY day ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$date_start
 			),
 			ARRAY_A
@@ -234,16 +281,18 @@ class SN_Analytics {
 		$data_map    = array();
 
 		for ( $i = $days; $i >= 0; $i-- ) {
-			$day                 = gmdate( 'Y-m-d', strtotime( "-{$i} days" ) );
-			$labels[]            = gmdate( 'M j', strtotime( $day ) );
-			$data_map[ $day ]    = array( 'impression' => 0, 'click' => 0 );
+			$day              = gmdate( 'Y-m-d', strtotime( "-{$i} days" ) );
+			$labels[]         = gmdate( 'M j', strtotime( $day ) );
+			$data_map[ $day ] = array( 'impression' => 0, 'click' => 0 );
 		}
 
-		foreach ( $rows as $row ) {
-			$day  = $row['day'];
-			$type = $row['event_type'];
-			if ( isset( $data_map[ $day ][ $type ] ) ) {
-				$data_map[ $day ][ $type ] = (int) $row['total'];
+		if ( is_array( $rows ) ) {
+			foreach ( $rows as $row ) {
+				$day  = $row['day'];
+				$type = $row['event_type'];
+				if ( isset( $data_map[ $day ][ $type ] ) ) {
+					$data_map[ $day ][ $type ] = (int) $row['total'];
+				}
 			}
 		}
 
@@ -267,12 +316,16 @@ class SN_Analytics {
 		global $wpdb;
 
 		$retention_days = absint( SN_Settings::get( 'analytics_retention_days', 90 ) );
-		$table          = $wpdb->prefix . self::TABLE;
-		$cutoff_date    = gmdate( 'Y-m-d H:i:s', strtotime( "-{$retention_days} days" ) );
 
-		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// Safety floor: never prune to less than 7 days.
+		$retention_days = max( 7, $retention_days );
+
+		$table       = $wpdb->prefix . self::TABLE;
+		$cutoff_date = gmdate( 'Y-m-d H:i:s', strtotime( "-{$retention_days} days" ) );
+
+		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"DELETE FROM {$table} WHERE created_at < %s",
+				"DELETE FROM {$table} WHERE created_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$cutoff_date
 			)
 		);

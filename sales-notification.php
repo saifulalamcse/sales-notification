@@ -3,7 +3,7 @@
  * Plugin Name:       Sales Notification
  * Plugin URI:        https://saiful.com/plugins/sales-notification
  * Description:       Display real-time WooCommerce purchase notifications on product pages to build social proof and increase conversion rates.
- * Version:           1.0.3
+ * Version:           1.0.4
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Saiful Alam
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // -----------------------------------------------------------------------
 // Constants
 // -----------------------------------------------------------------------
-define( 'SN_VERSION',     '1.0.3' );
+define( 'SN_VERSION',     '1.0.4' );
 define( 'SN_PLUGIN_FILE', __FILE__ );
 define( 'SN_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 define( 'SN_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
