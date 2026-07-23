@@ -75,8 +75,20 @@ class SN_Updater {
 		);
 
 		// Set the branch to track (main).
-		// Comparing the version header in the main branch against the local version.
 		self::$update_checker->setBranch( 'main' );
+
+		// Force PUC to check the main branch header directly instead of checking GitHub Releases or Tags.
+		// By default, if a repo has releases/tags, PUC prefers them over the branch file header.
+		// Filtering the strategy list to only 'branch' ensures pushing to main always triggers the update.
+		add_filter(
+			'puc_vcs_update_detection_strategies-sales-notification',
+			function( $strategies ) {
+				if ( isset( $strategies['branch'] ) ) {
+					return array( 'branch' => $strategies['branch'] );
+				}
+				return $strategies;
+			}
+		);
 	}
 
 	/**
