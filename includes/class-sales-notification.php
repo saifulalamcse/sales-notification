@@ -143,9 +143,14 @@ class Sales_Notification {
 	 * yet configured, so this is safe to call unconditionally.
 	 */
 	private function setup_updater() {
-		// Static method — register directly with WordPress rather than through
-		// the loader (which requires a $component object instance).
-		add_action( 'plugins_loaded', array( 'SN_Updater', 'init' ), 5 );
+		// Initialise updater. If plugins_loaded has already fired, run init() immediately.
+		if ( did_action( 'plugins_loaded' ) ) {
+			SN_Updater::init();
+		} else {
+			add_action( 'plugins_loaded', array( 'SN_Updater', 'init' ), 5 );
+			// Also run immediately to guarantee hooks are registered even if priority 5 passed
+			SN_Updater::init();
+		}
 	}
 
 	/**

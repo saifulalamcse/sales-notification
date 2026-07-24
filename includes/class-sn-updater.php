@@ -50,6 +50,11 @@ class SN_Updater {
 	 * @return void
 	 */
 	public static function init() {
+		// Prevent double initialization.
+		if ( ! is_null( self::$update_checker ) ) {
+			return;
+		}
+
 		$puc_file = SN_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php';
 
 		// Guard: library must exist inside the plugin directory.
